@@ -1,0 +1,38 @@
+---
+- hosts: all
+  tasks:
+    - shell: uptime
+      register: shell_result
+
+    - debug:
+        var: shell_result.stdout_lines
+
+    - name: Determine shared-dir mount point
+      command: "/usr/bin/env stat -c '%m' {{ shared_dir_real_path }}"
+      register: shared_dir_mount_point
+      changed_when: False
+
+    - name: Determine the mount point's filesystem type and mount options
+      set_fact:
+        "shared_dir_mount_{{ item }}": "{{ ansible_mounts | selectattr('mount', 'equalto', shared_dir_mount_point.stdout) | map(attribute = item) | join(',') }}"
+      with_items:
+         - fstype
+        - options
+  
+    - name: Determine the access to the shared-data directory
+      set_fact:
+        shared_dir_access_flags: "{{ ['ro', 'rw']  | intersect( shared_dir_mount_options.split(',') )}}"
+
+    - name: Verify Access mode sanity
+      assert:
+        that: shared_dir_access_flags | length == 1
+
+    - name: Get Shared dir mount options
+      shell: "grep -F `stat -c '%m' /dev/dm-0` /proc/self/mountinfo | cut -d' ' -f 6"
+      register: shared_dir_mount_options
+      changed_when: False
+    - debug:
+        var: shared_dir_mount_options.stdout_lines
+
+
+#
